@@ -37,7 +37,7 @@ class _FakeBackend:
     def is_alive(self, pane_id: str) -> bool:
         return pane_id in self.alive_panes
 
-    def find_pane_by_title_marker(self, marker: str) -> Optional[str]:
+    def find_pane_by_title_marker(self, marker: str, cwd_hint: str = "") -> Optional[str]:
         return self.marker_map.get(marker)
 
     def ensure_pane_log(self, pane_id: str) -> None:
@@ -152,7 +152,7 @@ def test_fallback_resolves_by_marker_when_pane_dead(cls, tmp_path: Path) -> None
 def test_fast_path_keeps_pane_when_resolver_raises(cls, tmp_path: Path) -> None:
     """If find_pane_by_title_marker raises, fast path should still work."""
     class _BrokenBackend(_FakeBackend):
-        def find_pane_by_title_marker(self, marker: str) -> Optional[str]:
+        def find_pane_by_title_marker(self, marker: str, cwd_hint: str = "") -> Optional[str]:
             raise RuntimeError("tmux error")
 
     backend = _BrokenBackend(alive_panes={"%10"})

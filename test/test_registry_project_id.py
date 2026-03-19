@@ -20,7 +20,7 @@ class _FakeBackend:
     def is_alive(self, pane_id: str) -> bool:
         return pane_id in self._alive
 
-    def find_pane_by_title_marker(self, marker: str) -> str | None:
+    def find_pane_by_title_marker(self, marker: str, cwd_hint: str = "") -> str | None:
         return self._marker_map.get(marker)
 
 

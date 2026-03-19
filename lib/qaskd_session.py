@@ -92,22 +92,26 @@ class QwenProjectSession:
         resolver = getattr(backend, "find_pane_by_title_marker", None)
 
         if pane_id and backend.is_alive(pane_id):
-            if marker and callable(resolver):
-                try:
-                    resolved = resolver(marker)
-                    if resolved and str(resolved) != str(pane_id) and backend.is_alive(str(resolved)):
-                        self.data["pane_id"] = str(resolved)
-                        self.data["updated_at"] = _now_str()
-                        self._write_back()
-                        self._attach_pane_log(backend, str(resolved))
-                        return True, str(resolved)
-                except Exception:
-                    pass
-            self._attach_pane_log(backend, pane_id)
-            return True, pane_id
+            # WezTerm multi-window: verify the alive pane belongs to this project.
+            cwd_check = getattr(backend, "pane_belongs_to_cwd", None)
+            if not cwd_check or cwd_check(pane_id, self.work_dir):
+                if marker and callable(resolver):
+                    try:
+                        resolved = resolver(marker, self.work_dir)
+                        if resolved and str(resolved) != str(pane_id) and backend.is_alive(str(resolved)):
+                            self.data["pane_id"] = str(resolved)
+                            self.data["updated_at"] = _now_str()
+                            self._write_back()
+                            self._attach_pane_log(backend, str(resolved))
+                            return True, str(resolved)
+                    except Exception:
+                        pass
+                self._attach_pane_log(backend, pane_id)
+                return True, pane_id
+            # else: pane alive but belongs to wrong project — fall through to marker resolution
 
         if marker and callable(resolver):
-            resolved = resolver(marker)
+            resolved = resolver(marker, self.work_dir)
             if resolved and backend.is_alive(str(resolved)):
                 self.data["pane_id"] = str(resolved)
                 self.data["updated_at"] = _now_str()
