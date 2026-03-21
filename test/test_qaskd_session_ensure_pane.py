@@ -18,7 +18,7 @@ class FakeTmuxBackend:
     def is_alive(self, pane_id: str) -> bool:
         return bool(self.alive.get(pane_id, False))
 
-    def find_pane_by_title_marker(self, marker: str) -> str | None:
+    def find_pane_by_title_marker(self, marker: str, cwd_hint: str = "") -> str | None:
         for prefix, pane in self.marker_map.items():
             if marker.startswith(prefix) or prefix.startswith(marker):
                 return pane

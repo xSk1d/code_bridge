@@ -581,7 +581,7 @@ class TmuxBackend(TerminalBackend):
             opt = "@" + opt
         self._tmux_run(["set-option", "-p", "-t", pane_id, opt, value or ""], check=False)
 
-    def find_pane_by_title_marker(self, marker: str) -> Optional[str]:
+    def find_pane_by_title_marker(self, marker: str, cwd_hint: str = "") -> Optional[str]:
         marker = (marker or "").strip()
         if not marker:
             return None
@@ -1121,9 +1121,59 @@ class WeztermBackend(TerminalBackend):
             self._last_list_error = f"wezterm cli list failed: {exc}"
         return None
 
-    def _pane_id_by_title_marker(self, panes: list[dict], marker: str) -> Optional[str]:
+    @staticmethod
+    def _extract_cwd_path(file_url: str) -> str:
+        """Extract filesystem path from a WezTerm file:// CWD URL."""
+        if not file_url:
+            return ""
+        url = str(file_url).strip()
+        if not url.startswith("file://"):
+            return url
+        # file:///path or file://hostname/path
+        rest = url[7:]  # strip "file://"
+        if rest.startswith("/"):
+            path = rest
+        else:
+            # file://hostname/path -> /path
+            slash = rest.find("/")
+            path = rest[slash:] if slash >= 0 else ""
+        # URL-decode percent-encoded characters (e.g. spaces as %20)
+        try:
+            from urllib.parse import unquote
+            path = unquote(path)
+        except Exception:
+            pass
+        return path.rstrip("/") or "/"
+
+    @staticmethod
+    def _cwd_matches(pane_cwd: str, work_dir: str) -> bool:
+        """Check if a pane's CWD matches the expected work directory."""
+        if not pane_cwd or not work_dir:
+            return False
+        extracted = WeztermBackend._extract_cwd_path(pane_cwd)
+        if not extracted:
+            return False
+        try:
+            return os.path.normpath(extracted) == os.path.normpath(work_dir)
+        except Exception:
+            return False
+
+    def _pane_id_by_title_marker(self, panes: list[dict], marker: str, cwd_hint: str = "") -> Optional[str]:
         if not marker:
             return None
+        cwd_hint = (cwd_hint or "").strip()
+        # When cwd_hint is provided, prefer panes matching both marker AND CWD
+        # before falling back to first-match. This prevents cross-project routing
+        # when multiple WezTerm windows share the same title marker.
+        if cwd_hint:
+            for pane in panes:
+                title = pane.get("title") or ""
+                if title.startswith(marker):
+                    if self._cwd_matches(pane.get("cwd", ""), cwd_hint):
+                        pane_id = pane.get("pane_id")
+                        if pane_id is not None:
+                            return str(pane_id)
+        # Fallback: first marker match (original behaviour, tmux-compatible).
         for pane in panes:
             title = pane.get("title") or ""
             if title.startswith(marker):
@@ -1132,11 +1182,24 @@ class WeztermBackend(TerminalBackend):
                     return str(pane_id)
         return None
 
-    def find_pane_by_title_marker(self, marker: str) -> Optional[str]:
+    def find_pane_by_title_marker(self, marker: str, cwd_hint: str = "") -> Optional[str]:
         panes = self._list_panes()
         if panes is None:
             return None
-        return self._pane_id_by_title_marker(panes, marker)
+        return self._pane_id_by_title_marker(panes, marker, cwd_hint)
+
+    def pane_belongs_to_cwd(self, pane_id: str, work_dir: str) -> bool:
+        """Return True if pane's CWD matches work_dir, or if CWD cannot be determined (fail-open)."""
+        panes = self._list_panes()
+        if not panes:
+            return True  # Can't verify — assume OK
+        for pane in panes:
+            if str(pane.get("pane_id")) == str(pane_id):
+                cwd = pane.get("cwd", "")
+                if not cwd:
+                    return True  # No CWD info — assume OK
+                return self._cwd_matches(cwd, work_dir)
+        return False  # Pane not found in list
 
     def is_alive(self, pane_id: str) -> bool:
         panes = self._list_panes()
