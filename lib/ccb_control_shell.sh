@@ -90,6 +90,14 @@ ccb_send() {
   ask "$(ccb_target)" "$payload"
 }
 
+ccb_send_roles() {
+  local provider
+  for provider in "${_CCB_CONTROL_TARGETS[@]}"; do
+    printf '\n[CCB-Control] refreshing role for %s\n' "$provider"
+    ccb-send-role "$provider"
+  done
+}
+
 _ccb_control_prompt() {
   printf '[to:%s] ' "$(ccb_target)"
 }
@@ -110,5 +118,6 @@ _ccb_control_install_prompt
 bind -x '"\C-]":ccb_rotate_target'
 bind -x '"\C-m":ccb_send_line'
 bind -x '"\C-j":ccb_send_line'
+bind -x '"\C-o":ccb_send_roles'
 
-printf '[CCB-Control] Alt-r rotate pane | Ctrl-] rotate target | Enter send | current target: %s\n' "$(ccb_target)"
+printf '[CCB-Control] Alt-r rotate pane | Ctrl-] rotate target | Enter send | Ctrl-o resend roles | current target: %s\n' "$(ccb_target)"

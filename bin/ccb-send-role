@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+script_dir = Path(__file__).resolve().parent
+sys.path.insert(0, str(script_dir.parent / "lib"))
+
+from provider_roles import startup_bootstrap
+from subprocess import run
+
+
+def _usage() -> int:
+    print("Usage: ccb-send-role <provider>", file=sys.stderr)
+    return 1
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        return _usage()
+
+    provider = str(argv[1] or "").strip().lower()
+    if not provider:
+        return _usage()
+
+    message = startup_bootstrap(provider)
+    if not message:
+        print(f"No role bootstrap defined for provider: {provider}", file=sys.stderr)
+        return 1
+
+    helper = script_dir / "ccb-send-pane"
+    result = run([str(helper), provider, message])
+    return int(result.returncode or 0)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))
