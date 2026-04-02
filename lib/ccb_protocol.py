@@ -4,6 +4,8 @@ import re
 import secrets
 from dataclasses import dataclass
 
+from provider_roles import delegated_role_prefix
+
 
 REQ_ID_PREFIX = "CCB_REQ_ID:"
 BEGIN_PREFIX = "CCB_BEGIN:"
@@ -58,6 +60,9 @@ def make_req_id() -> str:
 
 def wrap_codex_prompt(message: str, req_id: str) -> str:
     message = (message or "").rstrip()
+    role_prefix = delegated_role_prefix("codex")
+    if role_prefix:
+        message = f"{role_prefix}\n\n{message}".strip()
     return (
         f"{REQ_ID_PREFIX} {req_id}\n\n"
         f"{message}\n\n"

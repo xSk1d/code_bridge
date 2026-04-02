@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from ccb_protocol import (
     DONE_PREFIX,
@@ -10,13 +12,59 @@ from ccb_protocol import (
     make_req_id,
     strip_done_text,
 )
+from provider_roles import delegated_role_prefix
 
 # Match both old (32-char hex) and new (YYYYMMDD-HHMMSS-mmm-PID-counter) req_id formats
 ANY_DONE_LINE_RE = re.compile(r"^\s*CCB_DONE:\s*(?:[0-9a-f]{32}|\d{8}-\d{6}-\d{3}-\d+-\d+)\s*$", re.IGNORECASE)
+_SKILL_CACHE: str | None = None
+
+
+def _env_bool(name: str, default: bool = True) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    val = raw.strip().lower()
+    if val in {"0", "false", "no", "off"}:
+        return False
+    if val in {"1", "true", "yes", "on"}:
+        return True
+    return default
+
+
+def _load_gemini_skills() -> str:
+    global _SKILL_CACHE
+    if _SKILL_CACHE is not None:
+        return _SKILL_CACHE
+    if not _env_bool("CCB_GEMINI_SKILLS", True):
+        _SKILL_CACHE = ""
+        return _SKILL_CACHE
+    skills_dir = Path(__file__).resolve().parent.parent / "gemini_skills"
+    if not skills_dir.is_dir():
+        _SKILL_CACHE = ""
+        return _SKILL_CACHE
+    parts: list[str] = []
+    for name in ("coordination.md", "all-plan.md", "ask.md", "pend.md", "ping.md"):
+        path = skills_dir / name
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+        except Exception:
+            continue
+        if text:
+            parts.append(text)
+    _SKILL_CACHE = "\n\n".join(parts).strip()
+    return _SKILL_CACHE
 
 
 def wrap_gemini_prompt(message: str, req_id: str) -> str:
     message = (message or "").rstrip()
+    role_prefix = delegated_role_prefix("gemini")
+    if role_prefix:
+        message = f"{role_prefix}\n\n{message}".strip()
+    skills = _load_gemini_skills()
+    if skills:
+        message = f"{skills}\n\n{message}".strip()
     return (
         f"{REQ_ID_PREFIX} {req_id}\n\n"
         f"{message}\n\n"
@@ -78,7 +126,7 @@ class GaskdRequest:
     message: str
     output_path: str | None = None
     req_id: str | None = None
-    caller: str = "claude"
+    caller: str = "manual"
 
 
 @dataclass(frozen=True)

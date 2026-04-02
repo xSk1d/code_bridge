@@ -45,6 +45,7 @@ from process_lock import ProviderLock
 from askd_rpc import shutdown_daemon, read_state
 from askd_runtime import state_file_path
 from i18n import t
+from provider_roles import startup_bootstrap
 
 setup_windows_encoding()
 
@@ -552,6 +553,7 @@ class AILauncher:
     def __init__(
         self,
         providers: list,
+        primary_provider: str | None = None,
         resume: bool = False,
         auto: bool = False,
         cmd_config: dict | None = None,
@@ -559,6 +561,8 @@ class AILauncher:
         launch_env: dict | None = None,
     ):
         self.providers = providers or ["codex"]
+        normalized_primary = str(primary_provider or "").strip().lower()
+        self.primary_provider = normalized_primary if normalized_primary in self.providers else ""
         self.resume = resume
         self.auto = auto
         self.cmd_config = self._normalize_cmd_config(cmd_config)
@@ -621,6 +625,32 @@ class AILauncher:
                 if isinstance(k, str) and k.strip():
                     env[k.strip()] = str(v)
         return env
+
+    def _schedule_provider_bootstrap(self, provider: str, pane_id: str | None) -> None:
+        if not _env_bool("CCB_ROLE_BOOTSTRAP", True):
+            return
+        message = startup_bootstrap(provider)
+        target = str(pane_id or "").strip()
+        if not message or not target:
+            return
+
+        def _worker() -> None:
+            try:
+                delay_raw = (os.environ.get("CCB_ROLE_BOOTSTRAP_DELAY_S") or "").strip()
+                delay_s = float(delay_raw) if delay_raw else 2.0
+            except Exception:
+                delay_s = 2.0
+            if delay_s > 0:
+                time.sleep(delay_s)
+            try:
+                backend = WeztermBackend() if self.terminal_type == "wezterm" else TmuxBackend()
+                if not backend.is_alive(target):
+                    return
+                backend.send_text(target, message)
+            except Exception:
+                pass
+
+        threading.Thread(target=_worker, name=f"ccb-bootstrap-{provider}", daemon=True).start()
 
     def _project_config_dir(self) -> Path:
         return resolve_project_config_dir(self.project_root)
@@ -1294,6 +1324,7 @@ class AILauncher:
             print(f"❌ {t('unknown_provider', provider=provider)}")
             return None
 
+        self._schedule_provider_bootstrap(provider, pane_id)
         print(f"✅ {t('started_backend', provider=provider.capitalize(), terminal='wezterm pane', pane_id=pane_id)}")
         return pane_id
 
@@ -2202,6 +2233,7 @@ class AILauncher:
             pane_title_marker=pane_title_marker,
             codex_start_cmd=start_cmd,
         )
+        self._schedule_provider_bootstrap("codex", pane_id)
 
         print(f"✅ {t('started_backend', provider='Codex', terminal='tmux pane', pane_id=pane_id)}")
         return pane_id
@@ -2253,6 +2285,7 @@ class AILauncher:
             pane_title_marker=pane_title_marker,
             start_cmd=start_cmd,
         )
+        self._schedule_provider_bootstrap("gemini", pane_id)
 
         print(f"✅ {t('started_backend', provider='Gemini', terminal='tmux pane', pane_id=pane_id)}")
         return pane_id
@@ -3201,6 +3234,7 @@ class AILauncher:
             )
         except Exception:
             pass
+        self._schedule_provider_bootstrap("claude", pane_id)
 
         print(f"✅ {t('started_backend', provider='Claude', terminal=f'{self.terminal_type} pane', pane_id=pane_id)}")
         return pane_id
@@ -3367,7 +3401,7 @@ class AILauncher:
             print("❌ No providers configured. Define providers in ccb.config or pass them on the command line.", file=sys.stderr)
             return 2
 
-        self.anchor_provider = self.providers[-1]
+        self.anchor_provider = self.primary_provider or self.providers[-1]
         self.anchor_pane_id = self._current_pane_id()
         if not self.anchor_pane_id:
             print("❌ Unable to determine current pane id. Run inside tmux or WezTerm.", file=sys.stderr)
@@ -3377,7 +3411,8 @@ class AILauncher:
         spawn_items: list[str] = []
         if cmd_settings.get("enabled"):
             spawn_items.append("cmd")
-        spawn_items.extend(list(reversed(self.providers[:-1])))
+        other_providers = [provider for provider in self.providers if provider != self.anchor_provider]
+        spawn_items.extend(list(reversed(other_providers)))
         total_panes = 1 + len(spawn_items)
         left_count = 1 if total_panes <= 1 else max(1, total_panes // 2)
         right_count = total_panes - left_count
@@ -3497,6 +3532,7 @@ class AILauncher:
                 self._sync_cend_registry()
             except Exception:
                 pass
+            self._schedule_provider_bootstrap(self.anchor_provider, self.anchor_pane_id)
             return self._start_provider_in_current_pane(self.anchor_provider)
         finally:
             self.cleanup(**cleanup_kwargs)
@@ -3722,6 +3758,9 @@ def cmd_start(args):
     flags = config_data.get("flags") if isinstance(config_data.get("flags"), dict) else {}
     resume = bool(args.resume or flags.get("resume") or flags.get("restore") or flags.get("auto_resume"))
     auto = bool(args.auto or flags.get("auto") or flags.get("auto_mode"))
+    primary_provider = str(config_data.get("primary_provider") or "").strip().lower()
+    if primary_provider and primary_provider not in providers:
+        primary_provider = ""
     cmd_config = config_data.get("cmd") if isinstance(config_data, dict) else None
     if cmd_enabled:
         if isinstance(cmd_config, dict):
@@ -3737,6 +3776,7 @@ def cmd_start(args):
 
     launcher = AILauncher(
         providers=providers,
+        primary_provider=primary_provider,
         resume=resume,
         auto=auto,
         cmd_config=cmd_config,

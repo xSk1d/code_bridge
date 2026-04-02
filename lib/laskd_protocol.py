@@ -13,6 +13,7 @@ from ccb_protocol import (
     make_req_id,
     strip_done_text,
 )
+from provider_roles import delegated_role_prefix
 
 # Match new req_id format: YYYYMMDD-HHMMSS-mmm-PID-counter
 ANY_DONE_LINE_RE = re.compile(r"^\s*CCB_DONE:\s*\d{8}-\d{6}-\d{3}-\d+-\d+\s*$", re.IGNORECASE)
@@ -122,6 +123,9 @@ def extract_reply_for_req(text: str, req_id: str) -> str:
 
 def wrap_claude_prompt(message: str, req_id: str) -> str:
     message = (message or "").rstrip()
+    role_prefix = delegated_role_prefix("claude")
+    if role_prefix:
+        message = f"{role_prefix}\n\n{message}".strip()
     skills = _load_claude_skills()
     if skills:
         message = f"{skills}\n\n{message}".strip()

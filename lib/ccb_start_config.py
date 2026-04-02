@@ -10,7 +10,8 @@ from session_utils import legacy_project_config_dir, project_config_dir
 
 
 CONFIG_FILENAME = "ccb.config"
-DEFAULT_PROVIDERS = ["codex", "gemini", "opencode", "claude"]
+DEFAULT_PROVIDERS = ["codex", "opencode", "claude", "gemini"]
+DEFAULT_PRIMARY_PROVIDER = "gemini"
 
 
 @dataclass
@@ -20,6 +21,13 @@ class StartConfig:
 
 
 _ALLOWED_PROVIDERS = {"codex", "gemini", "opencode", "claude", "droid"}
+
+
+def _normalize_primary_provider(raw: object) -> str | None:
+    value = str(raw or "").strip().lower()
+    if value in _ALLOWED_PROVIDERS:
+        return value
+    return None
 
 
 def _parse_tokens(raw: str) -> list[str]:
@@ -76,6 +84,15 @@ def _parse_config_obj(obj: object) -> dict:
             data["providers"] = providers
             if cmd_enabled and "cmd" not in data:
                 data["cmd"] = True
+        primary_provider = (
+            _normalize_primary_provider(data.get("primary_provider"))
+            or _normalize_primary_provider(data.get("coordinator_provider"))
+            or _normalize_primary_provider(data.get("anchor_provider"))
+        )
+        if primary_provider and primary_provider in data.get("providers", []):
+            data["primary_provider"] = primary_provider
+        else:
+            data.pop("primary_provider", None)
         return data
 
     if isinstance(obj, list):
@@ -147,7 +164,14 @@ def ensure_default_start_config(work_dir: Path) -> Tuple[Optional[Path], bool]:
         target = legacy
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
-        payload = ",".join(DEFAULT_PROVIDERS) + "\n"
+        payload = json.dumps(
+            {
+                "providers": list(DEFAULT_PROVIDERS),
+                "primary_provider": DEFAULT_PRIMARY_PROVIDER,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ) + "\n"
         target.write_text(payload, encoding="utf-8")
         return target, True
     except Exception:
