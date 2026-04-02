@@ -743,11 +743,11 @@ class AILauncher:
                 self._warmup_provider(item)
             return pane_id
 
-        control_pane = _start_item("cmd", parent=self.anchor_pane_id, direction="bottom", percent=25)
+        control_pane = _start_item("cmd", parent=self.anchor_pane_id, direction="bottom", percent=12)
         if not control_pane:
             return 1
 
-        claude_pane = _start_item("claude", parent=self.anchor_pane_id, direction="right", percent=66)
+        claude_pane = _start_item("claude", parent=self.anchor_pane_id, direction="right", percent=67)
         if not claude_pane:
             return 1
 

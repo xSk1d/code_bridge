@@ -108,6 +108,7 @@ _ccb_control_write_target "$(_ccb_control_read_target)"
 _ccb_control_install_prompt
 
 bind -x '"\C-]":ccb_rotate_target'
-bind -x '"\C-s":ccb_send_line'
+bind -x '"\C-m":ccb_send_line'
+bind -x '"\C-j":ccb_send_line'
 
-printf '[CCB-Control] Ctrl-] rotate target | Ctrl-s send line | current target: %s\n' "$(ccb_target)"
+printf '[CCB-Control] Alt-r rotate pane | Ctrl-] rotate target | Enter send | current target: %s\n' "$(ccb_target)"

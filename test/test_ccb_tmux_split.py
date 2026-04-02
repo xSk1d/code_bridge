@@ -187,8 +187,8 @@ def test_run_up_uses_gemini_team_layout_in_tmux(monkeypatch, tmp_path: Path) -> 
 
     assert rc == 0
     assert calls == [
-        ("cmd", "%0", "bottom", 25),
-        ("claude", "%0", "right", 66),
+        ("cmd", "%0", "bottom", 12),
+        ("claude", "%0", "right", 67),
         ("codex", "%2", "right", 50),
     ]
 
@@ -227,7 +227,7 @@ def test_start_cmd_pane_sets_control_target_env(monkeypatch, tmp_path: Path) -> 
 
     monkeypatch.setattr(ccb, "TmuxBackend", _FakeTmuxBackend)
 
-    pane_id = launcher._start_cmd_pane(parent_pane="%0", direction="bottom", cmd_settings=launcher._cmd_settings(), percent=25)
+    pane_id = launcher._start_cmd_pane(parent_pane="%0", direction="bottom", cmd_settings=launcher._cmd_settings(), percent=12)
 
     assert pane_id == "%9"
     respawn_cmd = str(recorded["respawn_cmd"])
