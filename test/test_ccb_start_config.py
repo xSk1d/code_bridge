@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ccb_start_config import (
     DEFAULT_CMD_CONFIG,
+    DEFAULT_FLAGS,
     DEFAULT_PRIMARY_PROVIDER,
     DEFAULT_PROVIDERS,
     ensure_default_start_config,
@@ -52,6 +53,7 @@ def test_ensure_default_start_config_sets_gemini_primary(tmp_path: Path) -> None
     assert payload["providers"] == DEFAULT_PROVIDERS
     assert payload["primary_provider"] == DEFAULT_PRIMARY_PROVIDER
     assert payload["cmd"] == DEFAULT_CMD_CONFIG
+    assert payload["flags"] == DEFAULT_FLAGS
 
 
 def test_load_start_config_maps_central_input_to_cmd(tmp_path: Path) -> None:

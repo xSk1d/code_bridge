@@ -3824,7 +3824,11 @@ def cmd_start(args):
 
     flags = config_data.get("flags") if isinstance(config_data.get("flags"), dict) else {}
     resume = bool(args.resume or flags.get("resume") or flags.get("restore") or flags.get("auto_resume"))
-    auto = bool(args.auto or flags.get("auto") or flags.get("auto_mode"))
+    auto = True
+    if flags:
+        auto = bool(flags.get("auto", flags.get("auto_mode", True)))
+    if args.auto:
+        auto = True
     primary_provider = str(config_data.get("primary_provider") or "").strip().lower()
     if primary_provider and primary_provider not in providers:
         primary_provider = ""

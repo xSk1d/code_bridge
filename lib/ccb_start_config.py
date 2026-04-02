@@ -13,6 +13,7 @@ CONFIG_FILENAME = "ccb.config"
 DEFAULT_PROVIDERS = ["gemini", "claude", "codex"]
 DEFAULT_PRIMARY_PROVIDER = "gemini"
 DEFAULT_CMD_CONFIG = {"enabled": True, "title": "CCB-Control"}
+DEFAULT_FLAGS = {"auto": True}
 
 
 @dataclass
@@ -204,6 +205,7 @@ def ensure_default_start_config(work_dir: Path) -> Tuple[Optional[Path], bool]:
                 "providers": list(DEFAULT_PROVIDERS),
                 "primary_provider": DEFAULT_PRIMARY_PROVIDER,
                 "cmd": dict(DEFAULT_CMD_CONFIG),
+                "flags": dict(DEFAULT_FLAGS),
             },
             ensure_ascii=False,
             indent=2,
