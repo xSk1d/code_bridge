@@ -718,6 +718,59 @@ class AILauncher:
             start_cmd = self._default_cmd_start_cmd()
         return {"enabled": True, "title": title, "start_cmd": start_cmd}
 
+    def _should_use_gemini_team_layout(self, cmd_settings: dict) -> bool:
+        if self.terminal_type != "tmux":
+            return False
+        if not cmd_settings.get("enabled"):
+            return False
+        if self.anchor_provider != "gemini":
+            return False
+        providers = [str(p or "").strip().lower() for p in self.providers]
+        return len(providers) == 3 and set(providers) == {"gemini", "claude", "codex"}
+
+    def _run_gemini_team_layout(self, *, cmd_settings: dict) -> int:
+        def _start_item(item: str, *, parent: str | None, direction: str | None, percent: int = 50) -> str | None:
+            if item == "cmd":
+                return self._start_cmd_pane(parent_pane=parent, direction=direction, cmd_settings=cmd_settings, percent=percent)
+            if item == "claude":
+                return self._start_claude_pane(parent_pane=parent, direction=direction, percent=percent)
+            if item == "gemini":
+                return self._start_gemini_tmux(parent_pane=parent, direction=direction, percent=percent)
+            if item == "codex":
+                return self._start_codex_tmux(parent_pane=parent, direction=direction, percent=percent)
+            pane_id = self._start_provider(item, parent_pane=parent, direction=direction)
+            if pane_id:
+                self._warmup_provider(item)
+            return pane_id
+
+        control_pane = _start_item("cmd", parent=self.anchor_pane_id, direction="bottom", percent=25)
+        if not control_pane:
+            return 1
+
+        claude_pane = _start_item("claude", parent=self.anchor_pane_id, direction="right", percent=66)
+        if not claude_pane:
+            return 1
+
+        codex_pane = _start_item("codex", parent=claude_pane, direction="right", percent=50)
+        if not codex_pane:
+            return 1
+        self._warmup_provider("codex")
+
+        if "codex" in self.providers and self.anchor_provider != "codex":
+            self._maybe_start_caskd()
+
+        self._start_daemon_watchdog()
+
+        try:
+            try:
+                self._sync_cend_registry()
+            except Exception:
+                pass
+            self._schedule_provider_bootstrap(self.anchor_provider, self.anchor_pane_id)
+            return self._start_provider_in_current_pane(self.anchor_provider)
+        finally:
+            self.cleanup()
+
     def _default_cmd_start_cmd(self) -> str:
         if get_shell_type() == "powershell":
             return "pwsh" if shutil.which("pwsh") else "powershell"
@@ -1238,7 +1291,7 @@ class AILauncher:
         # WezTerm mode: no tmux dependency
         if self.terminal_type == "wezterm":
             print(f"🚀 {t('starting_backend', provider=provider.capitalize(), terminal='wezterm')}")
-            return self._start_provider_wezterm(provider, parent_pane=parent_pane, direction=direction)
+            return self._start_provider_wezterm(provider, parent_pane=parent_pane, direction=direction, percent=50)
 
         # tmux mode: check if tmux is available
         if not shutil.which("tmux"):
@@ -1246,7 +1299,7 @@ class AILauncher:
             if detect_terminal() == "wezterm":
                 self.terminal_type = "wezterm"
                 print(f"🚀 {t('starting_backend', provider=provider.capitalize(), terminal='wezterm - tmux unavailable')}")
-                return self._start_provider_wezterm(provider, parent_pane=parent_pane, direction=direction)
+                return self._start_provider_wezterm(provider, parent_pane=parent_pane, direction=direction, percent=50)
             else:
                 print(f"❌ {t('tmux_not_installed')}")
                 print(f"   {t('install_wezterm_or_tmux')}")
@@ -1262,13 +1315,13 @@ class AILauncher:
         print(f"🚀 {t('starting_backend', provider=provider.capitalize(), terminal='tmux')}")
 
         if provider == "codex":
-            return self._start_codex_tmux(parent_pane=parent_pane, direction=direction)
+            return self._start_codex_tmux(parent_pane=parent_pane, direction=direction, percent=50)
         elif provider == "gemini":
-            return self._start_gemini_tmux(parent_pane=parent_pane, direction=direction)
+            return self._start_gemini_tmux(parent_pane=parent_pane, direction=direction, percent=50)
         elif provider == "opencode":
-            return self._start_opencode_tmux(parent_pane=parent_pane, direction=direction)
+            return self._start_opencode_tmux(parent_pane=parent_pane, direction=direction, percent=50)
         elif provider == "droid":
-            return self._start_droid_tmux(parent_pane=parent_pane, direction=direction)
+            return self._start_droid_tmux(parent_pane=parent_pane, direction=direction, percent=50)
         else:
             print(f"❌ {t('unknown_provider', provider=provider)}")
             return None
@@ -1279,6 +1332,7 @@ class AILauncher:
         *,
         parent_pane: str | None = None,
         direction: str | None = None,
+        percent: int = 50,
     ) -> str | None:
         runtime = self.runtime_dir / provider
         runtime.mkdir(parents=True, exist_ok=True)
@@ -1300,7 +1354,7 @@ class AILauncher:
         env_overrides = self._provider_env_overrides(provider)
         full_cmd = title_cmd + self._build_env_prefix(env_overrides) + _build_export_path_cmd(self.script_dir / "bin") + start_cmd
         backend = WeztermBackend()
-        pane_id = backend.create_pane(full_cmd, str(Path.cwd()), direction=use_direction, percent=50, parent_pane=use_parent)
+        pane_id = backend.create_pane(full_cmd, str(Path.cwd()), direction=use_direction, percent=percent, parent_pane=use_parent)
         self.wezterm_panes[provider] = pane_id
 
         if provider == "codex":
@@ -2145,6 +2199,7 @@ class AILauncher:
         *,
         parent_pane: str | None = None,
         direction: str | None = None,
+        percent: int = 50,
     ) -> str | None:
         runtime = self.runtime_dir / "codex"
         runtime.mkdir(parents=True, exist_ok=True)
@@ -2181,7 +2236,7 @@ class AILauncher:
         except Exception:
             use_parent = None
 
-        pane_id = backend.create_pane("", str(Path.cwd()), direction=use_direction, percent=50, parent_pane=use_parent)
+        pane_id = backend.create_pane("", str(Path.cwd()), direction=use_direction, percent=percent, parent_pane=use_parent)
         backend.respawn_pane(pane_id, cmd=start_cmd, cwd=str(Path.cwd()), remain_on_exit=True)
         backend.set_pane_title(pane_id, pane_title_marker)
         backend.set_pane_user_option(pane_id, "@ccb_agent", "Codex")
@@ -2245,6 +2300,7 @@ class AILauncher:
         *,
         parent_pane: str | None = None,
         direction: str | None = None,
+        percent: int = 50,
     ) -> str | None:
         runtime = self.runtime_dir / "gemini"
         runtime.mkdir(parents=True, exist_ok=True)
@@ -2273,7 +2329,7 @@ class AILauncher:
         except Exception:
             use_parent = None
 
-        pane_id = backend.create_pane("", str(Path.cwd()), direction=use_direction, percent=50, parent_pane=use_parent)
+        pane_id = backend.create_pane("", str(Path.cwd()), direction=use_direction, percent=percent, parent_pane=use_parent)
         backend.respawn_pane(pane_id, cmd=start_cmd, cwd=str(Path.cwd()), remain_on_exit=True)
         backend.set_pane_title(pane_id, pane_title_marker)
         backend.set_pane_user_option(pane_id, "@ccb_agent", "Gemini")
@@ -2297,6 +2353,7 @@ class AILauncher:
         *,
         parent_pane: str | None = None,
         direction: str | None = None,
+        percent: int = 50,
     ) -> str | None:
         runtime = self.runtime_dir / "opencode"
         runtime.mkdir(parents=True, exist_ok=True)
@@ -2328,7 +2385,7 @@ class AILauncher:
         except Exception:
             use_parent = None
 
-        pane_id = backend.create_pane("", str(Path.cwd()), direction=use_direction, percent=50, parent_pane=use_parent)
+        pane_id = backend.create_pane("", str(Path.cwd()), direction=use_direction, percent=percent, parent_pane=use_parent)
         backend.respawn_pane(pane_id, cmd=start_cmd, cwd=str(Path.cwd()), remain_on_exit=True)
         backend.set_pane_title(pane_id, pane_title_marker)
         backend.set_pane_user_option(pane_id, "@ccb_agent", "OpenCode")
@@ -2351,6 +2408,7 @@ class AILauncher:
         *,
         parent_pane: str | None = None,
         direction: str | None = None,
+        percent: int = 50,
     ) -> str | None:
         runtime = self.runtime_dir / "droid"
         runtime.mkdir(parents=True, exist_ok=True)
@@ -2380,7 +2438,7 @@ class AILauncher:
         except Exception:
             use_parent = None
 
-        pane_id = backend.create_pane("", str(Path.cwd()), direction=use_direction, percent=50, parent_pane=use_parent)
+        pane_id = backend.create_pane("", str(Path.cwd()), direction=use_direction, percent=percent, parent_pane=use_parent)
         backend.respawn_pane(pane_id, cmd=start_cmd, cwd=str(Path.cwd()), remain_on_exit=True)
         backend.set_pane_title(pane_id, pane_title_marker)
         backend.set_pane_user_option(pane_id, "@ccb_agent", "Droid")
@@ -2404,6 +2462,7 @@ class AILauncher:
         parent_pane: str | None,
         direction: str | None,
         cmd_settings: dict,
+        percent: int = 50,
     ) -> str | None:
         if not cmd_settings.get("enabled"):
             return None
@@ -2422,11 +2481,11 @@ class AILauncher:
 
         if self.terminal_type == "wezterm":
             backend = WeztermBackend()
-            pane_id = backend.create_pane(full_cmd, str(Path.cwd()), direction=use_direction, percent=50, parent_pane=use_parent)
+            pane_id = backend.create_pane(full_cmd, str(Path.cwd()), direction=use_direction, percent=percent, parent_pane=use_parent)
             self.extra_panes["cmd"] = pane_id
         else:
             backend = TmuxBackend()
-            pane_id = backend.create_pane("", str(Path.cwd()), direction=use_direction, percent=50, parent_pane=use_parent)
+            pane_id = backend.create_pane("", str(Path.cwd()), direction=use_direction, percent=percent, parent_pane=use_parent)
             backend.respawn_pane(pane_id, cmd=full_cmd, cwd=str(Path.cwd()), remain_on_exit=True)
             backend.set_pane_title(pane_id, title)
             backend.set_pane_user_option(pane_id, "@ccb_agent", "Cmd")
@@ -3187,7 +3246,7 @@ class AILauncher:
             print(f"\n⚠️ {t('user_interrupted')}")
             return 130
 
-    def _start_claude_pane(self, *, parent_pane: str | None, direction: str | None) -> str | None:
+    def _start_claude_pane(self, *, parent_pane: str | None, direction: str | None, percent: int = 50) -> str | None:
         print(f"🚀 {t('starting_claude')}")
         env_overrides = self._claude_env_overrides()
 
@@ -3216,11 +3275,11 @@ class AILauncher:
 
         if self.terminal_type == "wezterm":
             backend = WeztermBackend()
-            pane_id = backend.create_pane(full_cmd, run_cwd, direction=use_direction, percent=50, parent_pane=use_parent)
+            pane_id = backend.create_pane(full_cmd, run_cwd, direction=use_direction, percent=percent, parent_pane=use_parent)
             self.wezterm_panes["claude"] = pane_id
         else:
             backend = TmuxBackend()
-            pane_id = backend.create_pane("", run_cwd, direction=use_direction, percent=50, parent_pane=use_parent)
+            pane_id = backend.create_pane("", run_cwd, direction=use_direction, percent=percent, parent_pane=use_parent)
             backend.respawn_pane(pane_id, cmd=full_cmd, cwd=run_cwd, remain_on_exit=True)
             backend.set_pane_title(pane_id, f"CCB-Claude-{self.project_id[:8]}")
             backend.set_pane_user_option(pane_id, "@ccb_agent", "Claude")
@@ -3491,6 +3550,9 @@ class AILauncher:
                 )
             except Exception:
                 pass
+
+        if self._should_use_gemini_team_layout(cmd_settings):
+            return self._run_gemini_team_layout(cmd_settings=cmd_settings)
 
         def _start_item(item: str, *, parent: str | None, direction: str | None) -> str | None:
             if item == "cmd":

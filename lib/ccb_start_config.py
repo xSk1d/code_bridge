@@ -10,7 +10,7 @@ from session_utils import legacy_project_config_dir, project_config_dir
 
 
 CONFIG_FILENAME = "ccb.config"
-DEFAULT_PROVIDERS = ["codex", "opencode", "claude", "gemini"]
+DEFAULT_PROVIDERS = ["gemini", "claude", "codex"]
 DEFAULT_PRIMARY_PROVIDER = "gemini"
 DEFAULT_CMD_CONFIG = {"enabled": True, "title": "CCB-Control"}
 

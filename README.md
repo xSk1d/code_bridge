@@ -395,7 +395,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 install
 
 ### Run
 ```bash
-ccb                    # Start providers from ccb.config
+ccb                    # Default: Gemini | Claude | Codex on top, control pane on bottom
 ccb codex gemini       # Start both
 ccb codex gemini opencode claude  # Start all four (spaces)
 ccb codex,gemini,opencode,claude  # Start all four (commas)
@@ -426,7 +426,7 @@ Default lookup order:
 
 Simple format (recommended):
 ```text
-codex,gemini,opencode,claude
+gemini,claude,codex,cmd
 ```
 
 Enable central input pane (default title/command):
@@ -437,13 +437,15 @@ codex,gemini,opencode,claude,cmd
 Advanced JSON (optional, for flags or custom central input pane):
 ```json
 {
-  "providers": ["codex", "gemini", "opencode", "claude"],
+  "providers": ["gemini", "claude", "codex"],
+  "primary_provider": "gemini",
   "cmd": { "enabled": true, "title": "CCB-Control", "start_cmd": "bash" },
   "flags": { "auto": false, "resume": false }
 }
 ```
 `central_input` is accepted as an alias for `cmd` in JSON config.
 The central input pane participates in the layout as the first extra pane and does not change which AI runs in the current pane.
+In tmux, the default Gemini team layout is: top row `Gemini | Claude | Codex`, bottom row `CCB-Control`.
 
 ### Update
 ```bash

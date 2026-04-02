@@ -142,3 +142,52 @@ def test_run_up_backfills_existing_claude_session_work_dir_fields(monkeypatch, t
     data = json.loads(session_file.read_text(encoding="utf-8"))
     assert data.get("work_dir") == str(tmp_path.resolve())
     assert data.get("work_dir_norm")
+
+
+def test_run_up_uses_gemini_team_layout_in_tmux(monkeypatch, tmp_path: Path) -> None:
+    ccb = _load_ccb_module()
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".ccb").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("TMUX_PANE", "%0")
+    monkeypatch.setattr(ccb, "detect_terminal", lambda: "tmux")
+
+    launcher = ccb.AILauncher(
+        providers=["gemini", "claude", "codex"],
+        primary_provider="gemini",
+        cmd_config=True,
+    )
+    launcher.terminal_type = "tmux"
+
+    calls: list[tuple[str, str | None, str | None, int]] = []
+
+    def _start_cmd_pane(*, parent_pane, direction, cmd_settings, percent=50):
+        calls.append(("cmd", parent_pane, direction, percent))
+        return "%1"
+
+    def _start_claude_pane(*, parent_pane, direction, percent=50):
+        calls.append(("claude", parent_pane, direction, percent))
+        return "%2"
+
+    def _start_codex_tmux(*, parent_pane=None, direction=None, percent=50):
+        calls.append(("codex", parent_pane, direction, percent))
+        return "%3"
+
+    monkeypatch.setattr(launcher, "_start_cmd_pane", _start_cmd_pane)
+    monkeypatch.setattr(launcher, "_start_claude_pane", _start_claude_pane)
+    monkeypatch.setattr(launcher, "_start_codex_tmux", _start_codex_tmux)
+    monkeypatch.setattr(launcher, "_warmup_provider", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(launcher, "_maybe_start_caskd", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(launcher, "_start_daemon_watchdog", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(launcher, "_sync_cend_registry", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(launcher, "_schedule_provider_bootstrap", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(launcher, "_start_provider_in_current_pane", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(launcher, "cleanup", lambda: None)
+
+    rc = launcher.run_up()
+
+    assert rc == 0
+    assert calls == [
+        ("cmd", "%0", "bottom", 25),
+        ("claude", "%0", "right", 66),
+        ("codex", "%2", "right", 50),
+    ]
