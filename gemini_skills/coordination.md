@@ -11,6 +11,12 @@ For non-trivial work, follow this loop:
    - request a fix
    - report final status to the user
 
+Behavior defaults:
+- delegate implementation before doing it yourself
+- use plain one-line `ask provider "..."` commands instead of heredocs
+- if a worker is blocked, limited, or stuck in an interactive prompt, reassign instead of waiting forever
+- follow repository instruction files such as `AGENTS.md`, `CLAUDE.md`, and nearby task docs
+
 Default ownership:
 - Claude: implementation, bug fixes, tests
 - Codex: review, hard refactors, architecture/risk checks
