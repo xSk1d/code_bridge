@@ -13,6 +13,7 @@ def test_gemini_role_text_marks_manager_behavior() -> None:
     assert "plan -> assign owner -> wait for result" in lowered
     assert "agents.md" in lowered
     assert "claude.md" in lowered
+    assert "team roles" in lowered
 
 
 def test_claude_role_text_marks_implementation_behavior() -> None:
@@ -29,3 +30,5 @@ def test_startup_bootstrap_exists_for_main_roles() -> None:
     assert "reviewer and heavy-lift engineer" in startup_bootstrap("codex")
     assert "Pick one owner for each step" in startup_bootstrap("gemini")
     assert "Follow repository markdown instructions" in startup_bootstrap("gemini")
+    assert "Do not start work" in startup_bootstrap("gemini")
+    assert "teammates" in startup_bootstrap("claude")

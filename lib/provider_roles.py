@@ -23,6 +23,13 @@ def _repo_markdown_rules() -> str:
     )
 
 
+def _team_awareness_rules() -> str:
+    return (
+        "- Team roles: Gemini is the coordinator, Claude is the primary implementer, and Codex is the reviewer/heavy engineer.\n"
+        "- Keep your own role distinct from your teammates' roles.\n"
+    )
+
+
 def delegated_role_prefix(provider: str) -> str:
     key = (provider or "").strip().lower()
     if key == "gemini":
@@ -37,6 +44,7 @@ def delegated_role_prefix(provider: str) -> str:
             "- Delegate most coding and test-writing to Claude.\n"
             "- Use Codex for review, hard refactors, validation, and second opinions.\n"
             "- Prefer coordination, synthesis, and next-step decisions over doing large code edits yourself.\n"
+            f"{_team_awareness_rules()}"
             f"{_repo_markdown_rules()}"
             "- After reading a worker result, either assign the next task, request a fix, or summarize the final outcome to the user.\n"
             "- Treat `CCB_ORCH_EVENT: task_complete` messages as authoritative task-state updates.\n"
@@ -50,6 +58,7 @@ def delegated_role_prefix(provider: str) -> str:
             "ROLE: You are the primary implementation worker in this multi-model CCB session.\n"
             "- Focus on coding, debugging, and writing tests.\n"
             "- Do the implementation work directly instead of re-planning the whole project.\n"
+            f"{_team_awareness_rules()}"
             f"{_repo_markdown_rules()}"
             "- If you are blocked by limits, permissions, or a clearly better-suited worker, say so explicitly so the coordinator can reassign the task.\n"
             "- Return structured worker output so the coordinator can parse it reliably.\n"
@@ -62,6 +71,7 @@ def delegated_role_prefix(provider: str) -> str:
             "- Focus on review, risky refactors, architecture validation, regression hunting, and second-pass engineering.\n"
             "- Prefer identifying problems, hard edge cases, and structural improvements over routine implementation.\n"
             "- When asked to implement, handle the difficult or broad parts and report remaining risks clearly.\n"
+            f"{_team_awareness_rules()}"
             f"{_repo_markdown_rules()}"
             "- If you are blocked by limits, permissions, or the task clearly belongs with Claude, say so explicitly so the coordinator can reassign it.\n"
             "- Return structured worker output so the coordinator can parse it reliably.\n"
@@ -74,8 +84,10 @@ def startup_bootstrap(provider: str) -> str:
     key = (provider or "").strip().lower()
     if key == "gemini":
         return (
+            "ROLE REMINDER ONLY. Do not start work, do not delegate, and do not reply to this message.\n"
             "You are the main coordinator for this CCB session.\n"
             "Default behavior:\n"
+            "- Your teammates are Claude (primary implementer) and Codex (reviewer/heavy engineer).\n"
             "- Plan first.\n"
             "- Pick one owner for each step.\n"
             "- Default to delegation first for non-trivial work.\n"
@@ -88,8 +100,10 @@ def startup_bootstrap(provider: str) -> str:
         )
     if key == "claude":
         return (
+            "ROLE REMINDER ONLY. Do not start work and do not reply to this message.\n"
             "You are the primary coder for this CCB session.\n"
             "Default behavior:\n"
+            "- Your teammates are Gemini (coordinator) and Codex (reviewer/heavy engineer).\n"
             "- Execute implementation tasks directly.\n"
             "- Write code and tests.\n"
             "- Follow repository markdown instructions such as AGENTS.md, CLAUDE.md, and nearby task docs.\n"
@@ -97,8 +111,10 @@ def startup_bootstrap(provider: str) -> str:
         )
     if key == "codex":
         return (
+            "ROLE REMINDER ONLY. Do not start work and do not reply to this message.\n"
             "You are the reviewer and heavy-lift engineer for this CCB session.\n"
             "Default behavior:\n"
+            "- Your teammates are Gemini (coordinator) and Claude (primary implementer).\n"
             "- Review architecture and implementation risks.\n"
             "- Handle larger refactors, tricky debugging, and second-pass validation.\n"
             "- Follow repository markdown instructions such as AGENTS.md, CLAUDE.md, and nearby task docs.\n"
