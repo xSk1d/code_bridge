@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+script_dir = Path(__file__).resolve().parent
+sys.path.insert(0, str(script_dir.parent / "lib"))
+
+from session_utils import find_project_session_file
+from terminal import get_backend_for_session, get_pane_id_from_session
+
+
+SESSION_FILES = {
+    "gemini": ".gemini-session",
+    "claude": ".claude-session",
+    "codex": ".codex-session",
+    "opencode": ".opencode-session",
+    "droid": ".droid-session",
+}
+
+
+def _usage() -> int:
+    print("Usage: ccb-send-pane <provider> <message>", file=sys.stderr)
+    return 1
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) < 3:
+        return _usage()
+
+    provider = str(argv[1] or "").strip().lower()
+    message = " ".join(argv[2:]).strip()
+    if not provider or not message:
+        return _usage()
+
+    session_name = SESSION_FILES.get(provider)
+    if not session_name:
+        print(f"Unknown provider: {provider}", file=sys.stderr)
+        return 1
+
+    session_path = find_project_session_file(Path.cwd(), session_name)
+    if not session_path or not session_path.exists():
+        print(f"No active {provider} session found for this project.", file=sys.stderr)
+        return 1
+
+    try:
+        data = json.loads(session_path.read_text(encoding="utf-8-sig"))
+    except Exception as exc:
+        print(f"Failed to read session file: {exc}", file=sys.stderr)
+        return 1
+
+    backend = get_backend_for_session(data)
+    if not backend:
+        print("No terminal backend available for session.", file=sys.stderr)
+        return 1
+
+    pane_id = get_pane_id_from_session(data)
+    if not pane_id:
+        print("No pane id found for session.", file=sys.stderr)
+        return 1
+
+    if not backend.is_alive(str(pane_id)):
+        print(f"{provider} pane is not alive.", file=sys.stderr)
+        return 1
+
+    ok = backend.send_text(str(pane_id), message)
+    if not ok:
+        print(f"Failed to send text to {provider} pane.", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

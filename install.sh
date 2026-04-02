@@ -125,6 +125,7 @@ SCRIPTS_TO_LINK=(
   bin/qpend
   bin/qping
   bin/ask
+  bin/ccb-send-pane
   bin/ccb-ping
   bin/pend
   bin/autonew

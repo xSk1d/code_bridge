@@ -231,6 +231,7 @@ def test_start_cmd_pane_sets_control_target_env(monkeypatch, tmp_path: Path) -> 
 
     assert pane_id == "%9"
     respawn_cmd = str(recorded["respawn_cmd"])
+    assert "CCB_CALLER=manual" in respawn_cmd
     assert "CCB_CONTROL_TARGETS=" in respawn_cmd
     assert "gemini claude codex" in respawn_cmd
     assert "CCB_CONTROL_DEFAULT_TARGET=gemini" in respawn_cmd

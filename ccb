@@ -2474,7 +2474,8 @@ class AILauncher:
         target_providers = [p for p in self.providers if p in {"gemini", "claude", "codex", "opencode", "droid"}]
         default_target = self.anchor_provider if self.anchor_provider in target_providers else (target_providers[0] if target_providers else "gemini")
         target_file = self._project_config_dir() / "control-target"
-        env_overrides = self._provider_env_overrides("codex")
+        env_overrides = self._managed_env_overrides()
+        env_overrides["CCB_CALLER"] = "manual"
         env_overrides["CCB_CONTROL_TARGETS"] = " ".join(target_providers) if target_providers else "gemini"
         env_overrides["CCB_CONTROL_DEFAULT_TARGET"] = default_target
         env_overrides["CCB_CONTROL_TARGET_FILE"] = str(target_file)

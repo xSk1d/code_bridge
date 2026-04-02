@@ -78,7 +78,7 @@ ccb_send_line() {
   READLINE_LINE=""
   READLINE_POINT=0
   printf '\n[CCB-Control] sending to %s\n' "$target"
-  ask "$target" "$payload"
+  ccb-send-pane "$target" "$payload"
 }
 
 ccb_send() {
