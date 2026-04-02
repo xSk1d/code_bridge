@@ -47,6 +47,7 @@ setup_windows_encoding()
 
 from cli_output import EXIT_ERROR, EXIT_OK
 from orchestration import record_task_spawn, record_task_submission
+from provider_state import load_provider_state, provider_state_path
 from providers import parse_qualified_provider
 from session_utils import find_project_session_file
 
@@ -511,6 +512,41 @@ def _usage() -> None:
     print("  --no-wrap               Don't wrap with CCB protocol markers", file=sys.stderr)
 
 
+def _emit_provider_unavailable(provider: str, state: dict, *, stream) -> None:
+    availability = str(state.get("availability") or "unknown").strip() or "unknown"
+    reason = str(state.get("reason") or "unknown").strip() or "unknown"
+    retry_after_s = state.get("retry_after_s")
+    state_file = state.get("state_file") or ""
+    print(f"[CCB_PROVIDER_UNAVAILABLE provider={provider}]", file=stream)
+    print("CCB_ORCH_EVENT: provider_unavailable", file=stream)
+    print(f"CCB_PROVIDER: {provider}", file=stream)
+    print(f"CCB_PROVIDER_AVAILABILITY: {availability}", file=stream)
+    print(f"CCB_PROVIDER_REASON: {reason}", file=stream)
+    if retry_after_s is not None:
+        print(f"CCB_PROVIDER_RETRY_AFTER_S: {retry_after_s}", file=stream)
+    if state_file:
+        print(f"CCB_PROVIDER_STATE_FILE: {state_file}", file=stream)
+    print(f"{display_name(provider)} is currently marked {availability}.", file=stream)
+
+
+def _maybe_short_circuit_for_provider_state(work_dir: str, provider: str, caller: str) -> int | None:
+    if _env_bool("CCB_IGNORE_PROVIDER_STATE", False):
+        return None
+    state = load_provider_state(work_dir, provider)
+    if not state:
+        return None
+    availability = str(state.get("availability") or "").strip().lower()
+    if availability != "limited":
+        return None
+    state["state_file"] = str(provider_state_path(work_dir, provider))
+    if caller == "manual":
+        _emit_provider_unavailable(provider, state, stream=sys.stderr)
+        print("[WARN] Continuing because caller is manual. Set CCB_IGNORE_PROVIDER_STATE=1 to suppress this warning.", file=sys.stderr)
+        return None
+    _emit_provider_unavailable(provider, state, stream=sys.stdout)
+    return EXIT_ERROR
+
+
 def main(argv: list[str]) -> int:
     if len(argv) <= 1:
         _usage()
@@ -576,9 +612,13 @@ def main(argv: list[str]) -> int:
         print("[ERROR] Message cannot be empty", file=sys.stderr)
         return EXIT_ERROR
 
+    caller = _require_caller()
+    blocked = _maybe_short_circuit_for_provider_state(os.getcwd(), base_provider, caller)
+    if blocked is not None:
+        return blocked
+
     # Notify mode: sync send, no wait for reply (used for hook notifications)
     if notify_mode:
-        _require_caller()
         if _use_unified_daemon():
             # TODO: Add fire-and-forget RPC mode for unified daemon
             # For now, disable unified mode for notify and use legacy path
@@ -607,14 +647,13 @@ def main(argv: list[str]) -> int:
     # Foreground mode: run provider directly via unified daemon
     if foreground_mode:
         if _use_unified_daemon():
-            caller = _require_caller()
             return _send_via_unified_daemon(provider, message, timeout, no_wrap, caller)
         else:
             cmd = [daemon_cmd, "--sync", "--timeout", str(timeout)]
             if no_wrap and provider == "claude":
                 cmd.append("--no-wrap")
             env = os.environ.copy()
-            env["CCB_CALLER"] = _require_caller()
+            env["CCB_CALLER"] = caller
             try:
                 result = subprocess.run(cmd, input=message, text=True, env=env)
                 return result.returncode
@@ -648,7 +687,6 @@ def main(argv: list[str]) -> int:
     _cleanup_task_logs(log_dir)
 
     # Detect caller from environment or default to "claude"
-    caller = _require_caller()
     caller_pane_id, caller_terminal = _caller_pane_info()
     _append_task_status_line(
         status_file,

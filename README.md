@@ -395,10 +395,11 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 install
 
 ### Run
 ```bash
-ccb                    # Start providers from ccb.config (default: all four)
+ccb                    # Start providers from ccb.config
 ccb codex gemini       # Start both
 ccb codex gemini opencode claude  # Start all four (spaces)
 ccb codex,gemini,opencode,claude  # Start all four (commas)
+ccb --central-input codex claude gemini  # Start three providers plus a shared control pane
 ccb -r codex gemini     # Resume last session for Codex + Gemini
 ccb -a codex gemini opencode  # Auto-approval mode with multiple providers
 ccb -a -r codex gemini opencode claude  # Auto + resume for all providers
@@ -428,20 +429,21 @@ Simple format (recommended):
 codex,gemini,opencode,claude
 ```
 
-Enable cmd pane (default title/command):
+Enable central input pane (default title/command):
 ```text
 codex,gemini,opencode,claude,cmd
 ```
 
-Advanced JSON (optional, for flags or custom cmd pane):
+Advanced JSON (optional, for flags or custom central input pane):
 ```json
 {
   "providers": ["codex", "gemini", "opencode", "claude"],
-  "cmd": { "enabled": true, "title": "CCB-Cmd", "start_cmd": "bash" },
+  "cmd": { "enabled": true, "title": "CCB-Control", "start_cmd": "bash" },
   "flags": { "auto": false, "resume": false }
 }
 ```
-Cmd pane participates in the layout as the first extra pane and does not change which AI runs in the current pane.
+`central_input` is accepted as an alias for `cmd` in JSON config.
+The central input pane participates in the layout as the first extra pane and does not change which AI runs in the current pane.
 
 ### Update
 ```bash

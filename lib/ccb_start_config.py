@@ -12,6 +12,7 @@ from session_utils import legacy_project_config_dir, project_config_dir
 CONFIG_FILENAME = "ccb.config"
 DEFAULT_PROVIDERS = ["codex", "opencode", "claude", "gemini"]
 DEFAULT_PRIMARY_PROVIDER = "gemini"
+DEFAULT_CMD_CONFIG = {"enabled": True, "title": "CCB-Control"}
 
 
 @dataclass
@@ -21,12 +22,35 @@ class StartConfig:
 
 
 _ALLOWED_PROVIDERS = {"codex", "gemini", "opencode", "claude", "droid"}
+_CMD_ALIASES = {"cmd", "central", "control"}
 
 
 def _normalize_primary_provider(raw: object) -> str | None:
     value = str(raw or "").strip().lower()
     if value in _ALLOWED_PROVIDERS:
         return value
+    return None
+
+
+def _normalize_cmd_config_value(raw: object) -> object:
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        return raw.strip()
+    if isinstance(raw, dict):
+        data = dict(raw)
+        title = str(data.get("title") or data.get("name") or "CCB-Control").strip() or "CCB-Control"
+        start_cmd = str(data.get("start_cmd") or data.get("command") or data.get("cmd") or "").strip()
+        enabled = data.get("enabled")
+        if enabled is None:
+            enabled = True
+        return {
+            "enabled": bool(enabled),
+            "title": title,
+            "start_cmd": start_cmd,
+        }
     return None
 
 
@@ -55,7 +79,7 @@ def _normalize_providers(tokens: list[str]) -> tuple[list[str], bool]:
         token = str(raw).strip().lower()
         if not token:
             continue
-        if token == "cmd":
+        if token in _CMD_ALIASES:
             cmd_enabled = True
             continue
         if token not in _ALLOWED_PROVIDERS:
@@ -70,6 +94,17 @@ def _normalize_providers(tokens: list[str]) -> tuple[list[str], bool]:
 def _parse_config_obj(obj: object) -> dict:
     if isinstance(obj, dict):
         data = dict(obj)
+        if "cmd" not in data:
+            for alias in ("central_input", "control_pane", "central"):
+                if alias in data:
+                    normalized_cmd = _normalize_cmd_config_value(data.get(alias))
+                    if normalized_cmd is not None:
+                        data["cmd"] = normalized_cmd
+                    break
+        else:
+            normalized_cmd = _normalize_cmd_config_value(data.get("cmd"))
+            if normalized_cmd is not None:
+                data["cmd"] = normalized_cmd
         raw_providers = data.get("providers")
         tokens: list[str] = []
         if isinstance(raw_providers, str):
@@ -168,6 +203,7 @@ def ensure_default_start_config(work_dir: Path) -> Tuple[Optional[Path], bool]:
             {
                 "providers": list(DEFAULT_PROVIDERS),
                 "primary_provider": DEFAULT_PRIMARY_PROVIDER,
+                "cmd": dict(DEFAULT_CMD_CONFIG),
             },
             ensure_ascii=False,
             indent=2,

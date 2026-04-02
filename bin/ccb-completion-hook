@@ -42,6 +42,7 @@ from completion_hook import (
     normalize_completion_status,
 )
 from orchestration import record_task_completion, render_completion_event
+from provider_state import record_provider_outcome
 from session_utils import find_project_session_file
 
 setup_windows_encoding()
@@ -355,6 +356,25 @@ def find_ask_command() -> str | None:
     return None
 
 
+def _render_terminal_message(
+    provider_display: str,
+    req_id: str,
+    reply_content: str,
+    *,
+    output_file: str | None,
+    status: str,
+) -> str:
+    """Backward-compatible wrapper used by existing tests and callers."""
+    return render_completion_event(
+        provider_display,
+        req_id,
+        reply_content,
+        output_file=output_file,
+        status=status,
+        task_file=None,
+    )
+
+
 def send_email_reply(provider: str, reply_content: str, *, status: str) -> bool:
     """Send reply via email when CCB_CALLER=email."""
     try:
@@ -505,6 +525,8 @@ def main() -> int:
 
     work_dir = os.environ.get("CCB_WORK_DIR", "")
     task_file = ""
+    provider_state_file = ""
+    provider_availability = ""
     if work_dir and req_id and req_id != "unknown":
         try:
             path = record_task_completion(
@@ -518,6 +540,23 @@ def main() -> int:
             task_file = str(path)
         except Exception:
             task_file = ""
+    if work_dir:
+        try:
+            state_path = record_provider_outcome(
+                work_dir,
+                provider,
+                status=status,
+                reply=reply_content,
+            )
+            provider_state_file = str(state_path)
+            try:
+                with open(state_path, encoding="utf-8") as fh:
+                    provider_availability = str(json.load(fh).get("availability") or "").strip()
+            except Exception:
+                provider_availability = ""
+        except Exception:
+            provider_state_file = ""
+            provider_availability = ""
 
     message = render_completion_event(
         provider_display,
@@ -527,6 +566,11 @@ def main() -> int:
         status=status,
         task_file=task_file or None,
     )
+    if provider_state_file:
+        extra = [f"CCB_PROVIDER_STATE_FILE: {provider_state_file}"]
+        if provider_availability:
+            extra.append(f"CCB_PROVIDER_AVAILABILITY: {provider_availability}")
+        message = "\n".join(extra) + "\n" + message
 
     # Direct pane routing: when the caller's pane ID was captured at ask-time and
     # threaded through the chain, use it directly. This is necessary because multiple

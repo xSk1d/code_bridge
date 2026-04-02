@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from ccb_start_config import (
+    DEFAULT_CMD_CONFIG,
     DEFAULT_PRIMARY_PROVIDER,
     DEFAULT_PROVIDERS,
     ensure_default_start_config,
@@ -50,3 +51,19 @@ def test_ensure_default_start_config_sets_gemini_primary(tmp_path: Path) -> None
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["providers"] == DEFAULT_PROVIDERS
     assert payload["primary_provider"] == DEFAULT_PRIMARY_PROVIDER
+    assert payload["cmd"] == DEFAULT_CMD_CONFIG
+
+
+def test_load_start_config_maps_central_input_to_cmd(tmp_path: Path) -> None:
+    cfg_dir = tmp_path / ".ccb"
+    cfg_dir.mkdir()
+    payload = {
+        "providers": ["codex", "claude", "gemini"],
+        "primary_provider": "gemini",
+        "central_input": {"enabled": True, "title": "Control"},
+    }
+    (cfg_dir / "ccb.config").write_text(json.dumps(payload), encoding="utf-8")
+
+    config = load_start_config(tmp_path)
+
+    assert config.data["cmd"] == {"enabled": True, "title": "Control", "start_cmd": ""}

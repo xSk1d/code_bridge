@@ -29,6 +29,7 @@ def delegated_role_prefix(provider: str) -> str:
             "- Prefer coordination, synthesis, and next-step decisions over doing large code edits yourself.\n"
             "- After reading a worker result, either assign the next task, request a fix, or summarize the final outcome to the user.\n"
             "- Treat `CCB_ORCH_EVENT: task_complete` messages as authoritative task-state updates.\n"
+            "- Treat `CCB_PROVIDER_AVAILABILITY: limited` as a signal to switch workers or ask the user before retrying that provider.\n"
             "- Ask the user only when requirements are unclear or you are blocked.\n"
             "- When reporting to the user, include: current owner, current status, and next step.\n"
         )
