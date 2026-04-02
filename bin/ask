@@ -46,6 +46,7 @@ from compat import read_stdin_text, setup_windows_encoding
 setup_windows_encoding()
 
 from cli_output import EXIT_ERROR, EXIT_OK
+from orchestration import record_task_spawn, record_task_submission
 from providers import parse_qualified_provider
 from session_utils import find_project_session_file
 
@@ -648,10 +649,25 @@ def main(argv: list[str]) -> int:
 
     # Detect caller from environment or default to "claude"
     caller = _require_caller()
+    caller_pane_id, caller_terminal = _caller_pane_info()
     _append_task_status_line(
         status_file,
         f"submitted task={task_id} provider={provider} caller={caller} work_dir={os.getcwd()}",
     )
+    try:
+        record_task_submission(
+            os.getcwd(),
+            task_id=task_id,
+            provider=provider,
+            caller=caller,
+            message=message,
+            log_file=str(log_file),
+            status_file=str(status_file),
+            caller_pane_id=caller_pane_id,
+            caller_terminal=caller_terminal,
+        )
+    except Exception:
+        pass
 
     # Get the path to this script for recursive call with --foreground
     ask_cmd = str(Path(__file__).resolve())
@@ -685,12 +701,11 @@ def main(argv: list[str]) -> int:
                 if val:
                     email_env_lines += f'$env:{key} = "{val}"\n'
 
-        win_caller_pane_id, win_caller_terminal = _caller_pane_info()
         win_pane_env_lines = ""
-        if win_caller_pane_id:
-            win_pane_env_lines += f'$env:CCB_CALLER_PANE_ID = "{win_caller_pane_id}"\n'
-        if win_caller_terminal:
-            win_pane_env_lines += f'$env:CCB_CALLER_TERMINAL = "{win_caller_terminal}"\n'
+        if caller_pane_id:
+            win_pane_env_lines += f'$env:CCB_CALLER_PANE_ID = "{caller_pane_id}"\n'
+        if caller_terminal:
+            win_pane_env_lines += f'$env:CCB_CALLER_TERMINAL = "{caller_terminal}"\n'
 
         script_content = f'''$ErrorActionPreference = "SilentlyContinue"
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -739,12 +754,11 @@ exit $rc
         ccb_run_dir = os.environ.get("CCB_RUN_DIR", "")
         run_dir_line = f'export CCB_RUN_DIR="{ccb_run_dir}"\n' if ccb_run_dir else ""
 
-        bg_pane_id, bg_terminal = _caller_pane_info()
         pane_env_lines = ""
-        if bg_pane_id:
-            pane_env_lines += f'export CCB_CALLER_PANE_ID="{bg_pane_id}"\n'
-        if bg_terminal:
-            pane_env_lines += f'export CCB_CALLER_TERMINAL="{bg_terminal}"\n'
+        if caller_pane_id:
+            pane_env_lines += f'export CCB_CALLER_PANE_ID="{caller_pane_id}"\n'
+        if caller_terminal:
+            pane_env_lines += f'export CCB_CALLER_TERMINAL="{caller_terminal}"\n'
 
         quoted_status = shlex.quote(str(status_file))
         quoted_ask_cmd = shlex.quote(ask_cmd)
@@ -789,6 +803,10 @@ exit "$rc"
 
     if bg_pid is not None:
         _append_task_status_line(status_file, f"spawned pid={bg_pid}")
+        try:
+            record_task_spawn(os.getcwd(), task_id=task_id, pid=bg_pid)
+        except Exception:
+            pass
     else:
         _append_task_status_line(status_file, "spawned pid=unknown")
 

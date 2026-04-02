@@ -41,6 +41,7 @@ from completion_hook import (
     default_reply_for_status,
     normalize_completion_status,
 )
+from orchestration import record_task_completion, render_completion_event
 from session_utils import find_project_session_file
 
 setup_windows_encoding()
@@ -354,36 +355,6 @@ def find_ask_command() -> str | None:
     return None
 
 
-def _render_terminal_message(
-    provider_display: str,
-    req_id: str,
-    reply_content: str,
-    *,
-    output_file: str | None,
-    status: str,
-) -> str:
-    marker = completion_status_marker(status)
-    status_label = completion_status_label(status)
-    if output_file:
-        return f"""CCB_REQ_ID: {req_id}
-
-{marker}
-Provider: {provider_display}
-Status: {status_label}
-Output file: {output_file}
-
-Result: {reply_content}
-"""
-    return f"""CCB_REQ_ID: {req_id}
-
-{marker}
-Provider: {provider_display}
-Status: {status_label}
-
-Result: {reply_content}
-"""
-
-
 def send_email_reply(provider: str, reply_content: str, *, status: str) -> bool:
     """Send reply via email when CCB_CALLER=email."""
     try:
@@ -532,12 +503,29 @@ def main() -> int:
     provider_display = provider_names.get(provider, provider.capitalize())
     req_id = args.req_id or "unknown"
 
-    message = _render_terminal_message(
+    work_dir = os.environ.get("CCB_WORK_DIR", "")
+    task_file = ""
+    if work_dir and req_id and req_id != "unknown":
+        try:
+            path = record_task_completion(
+                work_dir,
+                task_id=req_id,
+                provider=provider,
+                status=status,
+                reply=reply_content,
+                output_file=output_file,
+            )
+            task_file = str(path)
+        except Exception:
+            task_file = ""
+
+    message = render_completion_event(
         provider_display,
         req_id,
         reply_content,
         output_file=output_file,
         status=status,
+        task_file=task_file or None,
     )
 
     # Direct pane routing: when the caller's pane ID was captured at ask-time and
