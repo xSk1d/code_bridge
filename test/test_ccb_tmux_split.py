@@ -235,3 +235,27 @@ def test_start_cmd_pane_sets_control_target_env(monkeypatch, tmp_path: Path) -> 
     assert "gemini claude codex" in respawn_cmd
     assert "CCB_CONTROL_DEFAULT_TARGET=gemini" in respawn_cmd
     assert "CCB_CONTROL_TARGET_FILE=" in respawn_cmd
+
+
+def test_cmd_start_auto_enters_tmux_when_not_inside(monkeypatch, tmp_path: Path) -> None:
+    ccb = _load_ccb_module()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("TMUX", raising=False)
+    monkeypatch.delenv("TMUX_PANE", raising=False)
+    monkeypatch.delenv("CCB_AUTO_TMUX_LAUNCHED", raising=False)
+    monkeypatch.setattr(ccb.shutil, "which", lambda name: "/usr/bin/tmux" if name == "tmux" else None)
+
+    calls: list[list[str]] = []
+
+    def _fake_run(argv, *args, **kwargs):
+        calls.append(list(argv))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(ccb.subprocess, "run", _fake_run)
+
+    rc = ccb.cmd_start(SimpleNamespace(providers=[], resume=False, auto=False, central_input=False))
+
+    assert rc == 0
+    assert calls
+    assert calls[0][:4] == ["tmux", "new-session", "-A", "-s"]
+    assert any("CCB_AUTO_TMUX_LAUNCHED=1" in part for part in calls[0])

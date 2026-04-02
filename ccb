@@ -3613,6 +3613,10 @@ class AILauncher:
 
 
 def cmd_start(args):
+    auto_tmux_rc = _maybe_auto_enter_tmux(sys.argv[1:])
+    if auto_tmux_rc is not None:
+        return auto_tmux_rc
+
     # Enforce terminal environment requirement
     terminal = detect_terminal()
     if terminal is None:
@@ -3623,17 +3627,6 @@ def cmd_start(args):
         print("", file=sys.stderr)
         print("Or use WezTerm terminal emulator.", file=sys.stderr)
         return 1
-
-    def _env_truthy(name: str) -> bool:
-        raw = os.environ.get(name)
-        if raw is None:
-            return False
-        v = raw.strip().lower()
-        if v in {"1", "true", "yes", "y", "on"}:
-            return True
-        if v in {"0", "false", "no", "n", "off"}:
-            return False
-        return False
 
     def _is_dangerous_root(cwd: Path) -> tuple[bool, str]:
         try:
@@ -4199,6 +4192,43 @@ def _get_version_info(dir_path: Path) -> dict:
                 info["commit"] = parts[0]
                 info["date"] = parts[1].split()[0]
     return info
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+def _maybe_auto_enter_tmux(argv: list[str]) -> int | None:
+    if os.environ.get("TMUX") or os.environ.get("TMUX_PANE"):
+        return None
+    if os.environ.get("CCB_AUTO_TMUX_LAUNCHED"):
+        return None
+    if not _env_bool("CCB_AUTO_TMUX", True):
+        return None
+    if not shutil.which("tmux"):
+        return None
+
+    try:
+        project_id = compute_ccb_project_id(Path.cwd())
+    except Exception:
+        project_id = ""
+    session_name = f"ccb-{(project_id or 'main')[:8]}"
+    ccb_cmd = shlex.quote(str(Path(__file__).resolve()))
+    args_str = " ".join(shlex.quote(str(arg)) for arg in argv)
+    inner_cmd = f"CCB_AUTO_TMUX_LAUNCHED=1 {ccb_cmd}"
+    if args_str:
+        inner_cmd = f"{inner_cmd} {args_str}"
+    return subprocess.run(
+        ["tmux", "new-session", "-A", "-s", session_name, "-c", str(Path.cwd()), inner_cmd]
+    ).returncode
 
 
 def _format_version_info(info: dict) -> str:
