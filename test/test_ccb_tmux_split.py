@@ -191,3 +191,47 @@ def test_run_up_uses_gemini_team_layout_in_tmux(monkeypatch, tmp_path: Path) -> 
         ("claude", "%0", "right", 66),
         ("codex", "%2", "right", 50),
     ]
+
+
+def test_start_cmd_pane_sets_control_target_env(monkeypatch, tmp_path: Path) -> None:
+    ccb = _load_ccb_module()
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".ccb").mkdir(parents=True, exist_ok=True)
+    launcher = ccb.AILauncher(
+        providers=["gemini", "claude", "codex"],
+        primary_provider="gemini",
+        cmd_config=True,
+    )
+    launcher.terminal_type = "tmux"
+    launcher.anchor_provider = "gemini"
+
+    recorded: dict[str, object] = {}
+
+    class _FakeTmuxBackend:
+        def create_pane(self, cmd: str, cwd: str, direction: str = "right", percent: int = 50, parent_pane: str | None = None) -> str:
+            recorded["create_cmd"] = cmd
+            recorded["cwd"] = cwd
+            recorded["direction"] = direction
+            recorded["percent"] = percent
+            recorded["parent_pane"] = parent_pane
+            return "%9"
+
+        def respawn_pane(self, pane_id: str, *, cmd: str, cwd: str | None = None, remain_on_exit: bool = True, stderr_log_path: str | None = None) -> None:
+            recorded["respawn_cmd"] = cmd
+
+        def set_pane_title(self, pane_id: str, title: str) -> None:
+            recorded["title"] = title
+
+        def set_pane_user_option(self, pane_id: str, name: str, value: str) -> None:
+            recorded["user_option"] = (name, value)
+
+    monkeypatch.setattr(ccb, "TmuxBackend", _FakeTmuxBackend)
+
+    pane_id = launcher._start_cmd_pane(parent_pane="%0", direction="bottom", cmd_settings=launcher._cmd_settings(), percent=25)
+
+    assert pane_id == "%9"
+    respawn_cmd = str(recorded["respawn_cmd"])
+    assert "CCB_CONTROL_TARGETS=" in respawn_cmd
+    assert "gemini claude codex" in respawn_cmd
+    assert "CCB_CONTROL_DEFAULT_TARGET=gemini" in respawn_cmd
+    assert "CCB_CONTROL_TARGET_FILE=" in respawn_cmd

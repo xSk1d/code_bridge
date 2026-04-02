@@ -446,6 +446,7 @@ Advanced JSON (optional, for flags or custom central input pane):
 `central_input` is accepted as an alias for `cmd` in JSON config.
 The central input pane participates in the layout as the first extra pane and does not change which AI runs in the current pane.
 In tmux, the default Gemini team layout is: top row `Gemini | Claude | Codex`, bottom row `CCB-Control`.
+Inside `CCB-Control`, `Ctrl-]` rotates the active target and `Ctrl-s` sends the current input line to that target. By default it starts on `gemini`.
 
 ### Update
 ```bash

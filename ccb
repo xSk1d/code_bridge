@@ -772,8 +772,11 @@ class AILauncher:
             self.cleanup()
 
     def _default_cmd_start_cmd(self) -> str:
+        control_script = self.script_dir / "lib" / "ccb_control_shell.sh"
         if get_shell_type() == "powershell":
             return "pwsh" if shutil.which("pwsh") else "powershell"
+        if control_script.exists():
+            return f"bash --noprofile --rcfile {shlex.quote(str(control_script))} -i"
         shell = (os.environ.get("SHELL") or "bash").strip() or "bash"
         if not shutil.which(shell):
             shell = "bash"
@@ -2468,9 +2471,16 @@ class AILauncher:
             return None
         title = (cmd_settings.get("title") or "CCB-Control").strip() or "CCB-Control"
         start_cmd = (cmd_settings.get("start_cmd") or "").strip() or self._default_cmd_start_cmd()
+        target_providers = [p for p in self.providers if p in {"gemini", "claude", "codex", "opencode", "droid"}]
+        default_target = self.anchor_provider if self.anchor_provider in target_providers else (target_providers[0] if target_providers else "gemini")
+        target_file = self._project_config_dir() / "control-target"
+        env_overrides = self._provider_env_overrides("codex")
+        env_overrides["CCB_CONTROL_TARGETS"] = " ".join(target_providers) if target_providers else "gemini"
+        env_overrides["CCB_CONTROL_DEFAULT_TARGET"] = default_target
+        env_overrides["CCB_CONTROL_TARGET_FILE"] = str(target_file)
         full_cmd = (
             _build_pane_title_cmd(title)
-            + self._build_env_prefix(self._provider_env_overrides("codex"))
+            + self._build_env_prefix(env_overrides)
             + _build_export_path_cmd(self.script_dir / "bin")
             + _build_cd_cmd(Path.cwd())
             + start_cmd
