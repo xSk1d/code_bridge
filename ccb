@@ -627,7 +627,9 @@ class AILauncher:
         return env
 
     def _schedule_provider_bootstrap(self, provider: str, pane_id: str | None) -> None:
-        if not _env_bool("CCB_ROLE_BOOTSTRAP", True):
+        # Startup bootstraps can race provider startup or create unsolicited replies,
+        # so keep them opt-in until a non-chatty initialization path exists.
+        if not _env_bool("CCB_ROLE_BOOTSTRAP", False):
             return
         message = startup_bootstrap(provider)
         target = str(pane_id or "").strip()
