@@ -65,9 +65,10 @@ def main(argv: list[str]) -> int:
         print(f"{provider} pane is not alive.", file=sys.stderr)
         return 1
 
-    ok = backend.send_text(str(pane_id), message)
-    if not ok:
-        print(f"Failed to send text to {provider} pane.", file=sys.stderr)
+    try:
+        backend.send_text(str(pane_id), message)
+    except Exception as exc:
+        print(f"Failed to send text to {provider} pane: {exc}", file=sys.stderr)
         return 1
     return 0
 
